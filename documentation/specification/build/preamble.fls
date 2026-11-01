@@ -1,0 +1,5 @@
+PWD /home/admin/Projects/bme/prog1_nh/documentation/specification
+INPUT /usr/share/texmf-dist/web2c/texmf.cnf
+INPUT /var/lib/texmf/web2c/pdftex/pdflatex.fmt
+INPUT preamble.tex
+OUTPUT build/preamble.log

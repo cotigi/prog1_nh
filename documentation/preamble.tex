@@ -1,0 +1,91 @@
+% Catppuccin
+\usepackage[mocha, pagecolor=true, textcolor=true]{catppuccinpalette}
+
+% Catppuccin mocha colors
+\definecolor{rosewater}{HTML}{f5e0dc}   % Rosewater
+\definecolor{flamingo}{HTML}{f2cdcd}    % Flamingo
+\definecolor{pink}{HTML}{f5c2e7}        % Pink
+\definecolor{mauve}{HTML}{cba6f7}       % Mauve
+\definecolor{red}{HTML}{f38ba8}         % Red
+\definecolor{maroon}{HTML}{eba0ac}      % Maroon
+\definecolor{peach}{HTML}{fab387}       % Peach
+\definecolor{yellow}{HTML}{f9e2af}      % Yellow
+\definecolor{green}{HTML}{a6e3a1}       % Green
+\definecolor{teal}{HTML}{94e2d5}        % Teal
+\definecolor{sky}{HTML}{89dceb}         % Sky
+\definecolor{sapphire}{HTML}{74c7ec}    % Sapphire
+\definecolor{blue}{HTML}{89b4fa}        % Blue
+\definecolor{lavender}{HTML}{b4befe}    % Lavender
+\definecolor{text}{HTML}{cdd6f4}        % Text
+\definecolor{subtext1}{HTML}{bac2de}    % Subtext 1
+\definecolor{subtext0}{HTML}{a6adc8}    % Subtext 0
+\definecolor{overlay2}{HTML}{9399b2}    % Overlay 2
+\definecolor{overlay1}{HTML}{7f849c}    % Overlay 1
+\definecolor{overlay0}{HTML}{6c7086}    % Overlay 0
+\definecolor{surface2}{HTML}{585b70}    % Surface 2
+\definecolor{surface1}{HTML}{45475a}    % Surface 1
+\definecolor{surface0}{HTML}{313244}    % Surface 0
+\definecolor{base}{HTML}{1e1e2e}        % Base
+\definecolor{mantle}{HTML}{181825}      % Mantle
+\definecolor{crust}{HTML}{11111b}       % Crust
+
+% HREF
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=sapphire,
+    filecolor=pink,
+    urlcolor=mauve
+}
+
+\urlstyle{same}
+
+% Title Formatting
+\usepackage{titlesec}
+
+\titleformat{\section}
+    {\normalfont\Large\bfseries\color{red}}
+    {\thesection}{1em}{}
+
+\titleformat{\subsection}
+    {\normalfont\large\bfseries\color{maroon}}
+    {\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+    {\normalfont\normalsize\bfseries\color{peach}}
+    {\thesubsubsection}{1em}{}
+
+% Callout
+\usepackage{mdframed}
+\usepackage{xcolor}
+
+\mdfdefinestyle{calloutbase}{
+  topline=false, rightline=false, bottomline=false,
+  linewidth=2pt,
+  innerleftmargin=10pt,
+  innerrightmargin=0pt,
+  innertopmargin=4pt,
+  innerbottommargin=4pt,
+}
+
+\newmdenv[
+    style=calloutbase,
+    backgroundcolor=mantle,
+    font=\color{subtext1},
+    linecolor=sapphire,
+    frametitlefont=\color{sapphire}\bfseries
+]{cnote}
+\newmdenv[
+    style=calloutbase,
+    backgroundcolor=mantle,
+    font=\color{subtext1},
+    linecolor=green,
+    frametitlefont=\color{green}\bfseries
+]{ctip}
+\newmdenv[
+    style=calloutbase,
+    backgroundcolor=mantle,
+    font=\color{subtext1},
+    linecolor=peach,
+    frametitlefont=\color{peach}\bfseries
+]{cwarning}

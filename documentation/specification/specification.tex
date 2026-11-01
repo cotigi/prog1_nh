@@ -1,0 +1,75 @@
+\documentclass{article}
+\input{../preamble.tex}
+
+\begin{document}
+\title{Audió Szintetizátor Specifikáció}
+\author{Pászti Tibor Miklós}
+\maketitle
+
+\section{Specifikáció:}
+\subsection{Felhasználói Felület:}
+Az Audió Szintetizátor alapvetően egy SDL3 GUI-n keresztül lesz 
+elérhető, ahol az alábbi műveleteket lehet elvégezni:
+
+\begin{enumerate}
+    \item {MIDI fájl kiválasztás} 
+    \item {Oszcillátor konfiguráció kiválasztás} 
+    \item {Oszcillátor paraméterek módosítása (\textbf{waveform}, \textbf{velocity}, ...)} 
+    \item {Audió fájl lejátszása} 
+\end{enumerate}
+
+\begin{cnote}[frametitle=Megjegyzés:]
+    SDL3 főleg a megújult audió lejátszás miatt lett választva.
+\end{cnote}
+
+\begin{cnote}[frametitle=Megjegyzés:]
+    A projekt szigorúan csakis a 
+    \href{https://catppuccin.com/palette/}{Catppuccin Mocha}
+    szín palettát fogja használni.
+\end{cnote}
+
+\subsection{MIDI Fájl:}
+A program egy adott MIDI fájl alapján fogja le szintetizálni 
+az audió fájl-t.
+
+\begin{cnote}[frametitle=Megjegyzés:]
+    Vannak MIDI eventek amikre nem lesz szükség a jelenlegi
+    projekt keretein belül. 
+    Erre néhány példa:
+    \begin{enumerate}
+        \item{Control/Mode Change}
+        \item{Program Change}
+        \item{Pitch Bend Change}
+    \end{enumerate}
+
+    \href{https://midi.org/expanded-midi-1-0-messages-list}{MIDI eventek}
+\end{cnote}
+
+\subsection{Oszcillátor:}
+Minden MIDI channel kap egy saját oszcillátort aminek az 
+alap állása egy Sine waveform, konstans velocity-vel.
+A GUI-n keresztül lehetőség lesz az adott oszcillátor
+paramétereinek módosítására, a jelenlegi paraméterek 
+elmentésére és az addig elmentett konfigurációk beolvasására.
+
+\subsubsection{Konfigurációs Fájl:}
+Az oszcillátorok paramétereinek tárolása 
+\href{https://en.wikipedia.org/wiki/INI_file}{INI}
+fájlok-al fog történni, a könnyű olvashatóság és módosítás illetve kezelhető beolvasás
+érdekében.
+
+\subsubsection{Paraméterek:}
+\begin{enumerate}
+    \item{Waveform}
+    \item{Velocity}
+    \item{Amplitude}
+\end{enumerate}
+
+\subsubsection{Waveform-ok:}
+Alapvetően csak 3 hullám tipus lesz:
+\begin{enumerate}
+    \item{Sine wave}
+    \item{Square wave}
+    \item{Triangle wave}
+\end{enumerate}
+\end{document}

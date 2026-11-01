@@ -1,0 +1,11 @@
+# Fdb version 4
+["pdflatex"] 1793567242.46375 "preamble.tex" "build/preamble.pdf" "preamble" 1793567251.31601 2
+  "/usr/share/texmf-dist/web2c/texmf.cnf" 1781375284 43544 592730f9398f3c3728743a5a0e62f095 ""
+  "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1788812816 3636404 46f65b1856f69559d92f3eee2dabaf5d ""
+  "build/preamble.aux" 1793539257.9158 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "preamble.tex" 1793567240.14172 2068 8ae2727a0f38a56fe5577105fb1e0f74 ""
+  (generated)
+  "build/preamble.aux"
+  "build/preamble.log"
+  "build/preamble.pdf"
+  (rewritten before read)
