@@ -1,5 +1,30 @@
-% Catppuccin
-\usepackage[mocha, pagecolor=true, textcolor=true]{catppuccinpalette}
+\usepackage[
+    mocha,
+    pagecolor=true,
+    textcolor=true
+]{catppuccinpalette}
+\usepackage[
+    backend=biber,
+    style=alphabetic,
+    sorting=ynt
+]{biblatex}
+\usepackage{mdframed}
+\usepackage{letltxmacro}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[fixed]{fontawesome5}
+\usepackage{titlesec}
+\usepackage{abstract}
+\usepackage{hyperref}
+\usepackage[nottoc,numbib]{tocbibind}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{caption}
+\usepackage{multicol}
+\usepackage{amsmath}
+
+% Pgfplots 
+\pgfplotsset{compat=1.18}
 
 % Catppuccin mocha colors
 \definecolor{rosewater}{HTML}{f5e0dc}   % Rosewater
@@ -30,62 +55,103 @@
 \definecolor{crust}{HTML}{11111b}       % Crust
 
 % HREF
-\usepackage{hyperref}
 \hypersetup{
     colorlinks=true,
-    linkcolor=sapphire,
-    filecolor=pink,
-    urlcolor=mauve
+    linkcolor=peach,
+    filecolor=yellow,
+    urlcolor=sapphire
 }
 
 \urlstyle{same}
 
-% Title Formatting
-\usepackage{titlesec}
-
+% Formatting
 \titleformat{\section}
-    {\normalfont\Large\bfseries\color{red}}
+    {\normalfont\Large\bfseries\color{maroon}}
     {\thesection}{1em}{}
 
 \titleformat{\subsection}
-    {\normalfont\large\bfseries\color{maroon}}
+    {\normalfont\large\bfseries\color{peach}}
     {\thesubsection}{1em}{}
 
 \titleformat{\subsubsection}
-    {\normalfont\normalsize\bfseries\color{peach}}
+    {\normalfont\normalsize\bfseries\color{yellow}}
     {\thesubsubsection}{1em}{}
 
-% Callout
-\usepackage{mdframed}
-\usepackage{xcolor}
+\renewcommand{\abstractname}{\color{red}\normalfont\normalsize\bfseries Abstract}
 
+\setlist[enumerate,1]{label=\color{peach}\arabic*., font=\bfseries}
+\setlist[enumerate,2]{label=\color{yellow}(\alph*), font=\bfseries}
+\setlist[enumerate,3]{label=\color{green}\roman*., font=\bfseries}
+\setlist[enumerate,4]{label=\color{teal}\Alph*., font=\bfseries}
+
+\LetLtxMacro{\oldtextbf}{\textbf}
+\renewcommand{\textbf}[1]{\oldtextbf{\color{mauve}#1}}
+\LetLtxMacro{\oldtextit}{\textit}
+\renewcommand{\textit}[1]{\oldtextit{\color{flamingo}#1}}
+
+\everymath{\color{pink}}
+\everydisplay{\color{pink}}
+
+% Tikz Axis
+\pgfplotsset{
+    custom/.style={
+        enlargelimits = true,
+        thick,
+        font = \small,
+        axis line style = {rosewater},
+        tick style = {rosewater},
+        label style = {color = rosewater},
+        xticklabel style = {color = rosewater},
+        yticklabel style = {color = rosewater},
+        legend pos = north east,
+        legend style = {
+            font=\small,
+            draw=rosewater,
+            fill=mantle
+        }
+    }
+}
+
+% Callouts
 \mdfdefinestyle{calloutbase}{
   topline=false, rightline=false, bottomline=false,
   linewidth=2pt,
   innerleftmargin=10pt,
-  innerrightmargin=0pt,
-  innertopmargin=4pt,
-  innerbottommargin=4pt,
+  innerrightmargin=10pt,
+  innertopmargin=6pt,
+  innerbottommargin=6pt,
+  backgroundcolor=mantle,
+  font=\color{subtext1},
 }
 
-\newmdenv[
-    style=calloutbase,
-    backgroundcolor=mantle,
-    font=\color{subtext1},
-    linecolor=sapphire,
-    frametitlefont=\color{sapphire}\bfseries
-]{cnote}
-\newmdenv[
-    style=calloutbase,
-    backgroundcolor=mantle,
-    font=\color{subtext1},
-    linecolor=green,
-    frametitlefont=\color{green}\bfseries
-]{ctip}
-\newmdenv[
-    style=calloutbase,
-    backgroundcolor=mantle,
-    font=\color{subtext1},
-    linecolor=peach,
-    frametitlefont=\color{peach}\bfseries
-]{cwarning}
+\newmdenv[style=calloutbase, linecolor=sapphire]{cnote-base}
+\newenvironment{cnote}[1][Note]{%
+  \begin{cnote-base}%
+  {\color{sapphire}\bfseries\faInfoCircle\hspace{0.5em}#1}\par\vspace{4pt}%
+}{%
+  \end{cnote-base}%
+}
+
+\newmdenv[style=calloutbase, linecolor=green]{ctip-base}
+\newenvironment{ctip}[1][Tip]{%
+  \begin{ctip-base}%
+  {\color{green}\bfseries\faLightbulb\hspace{0.5em}#1}\par\vspace{4pt}%
+}{%
+  \end{ctip-base}%
+}
+
+\newmdenv[style=calloutbase, linecolor=peach]{cwarning-base}
+\newenvironment{cwarning}[1][Warning]{%
+  \begin{cwarning-base}%
+  {\color{peach}\bfseries\faExclamationTriangle\hspace{0.5em}#1}\par\vspace{4pt}%
+}{%
+  \end{cwarning-base}%
+}
+
+\newmdenv[style=calloutbase, linecolor=overlay2]{cinfo-base}
+\newenvironment{cinfo}[1][Further Information]{%
+  \begin{cinfo-base}%
+  {\color{overlay2}\bfseries\faBookOpen\hspace{0.5em}#1}\par\vspace{4pt}%
+}{%
+  \end{cinfo-base}%
+}
