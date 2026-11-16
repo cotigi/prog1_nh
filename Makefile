@@ -1,22 +1,27 @@
 CC = gcc
-# Automatically fetch GLib include paths
-CFLAGS = -Wall -Wextra -Iinclude -g $(shell pkg-config --cflags glib-2.0)
-# Automatically fetch GLib library linking flags
-LDLIBS = $(shell pkg-config --libs glib-2.0) -lsmf -L/usr/local/lib
+# Automatically fetch include paths for GLib, SDL3, and SDL3_mixer
+CFLAGS = -Wall -Wextra -Iinclude -g $(shell pkg-config --cflags glib-2.0 sdl3 sdl3-mixer)
+# Automatically fetch library linking flags
+LDLIBS = $(shell pkg-config --libs glib-2.0 sdl3 sdl3-mixer) -lsmf -L/usr/local/lib
 
-SRCS = $(wildcard src/*.c) $(wildcard src/modules/*.c)
-OBJS = $(SRCS:.c=.o)
+SRCS = $(wildcard src/*.c) $(wildcard src/modules/*.c) $(wildcard src/modules/sdl/*.c)
+
+# Route all object files into the build/ folder
+OBJS = $(patsubst %.c, build/%.o, $(SRCS))
 TARGET = synth
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
-%.o: %.c
+# Pattern rule to compile into build/ and auto-create subdirectories
+build/%.o: %.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -rf build
 
 .PHONY: all clean

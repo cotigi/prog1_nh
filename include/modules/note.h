@@ -1,28 +1,20 @@
-#define TABLE_LENGTH 4096
-#define SAMPLERATE 44100
+#ifndef NOTE_H
+#define NOTE_H
 
 typedef struct {
     int     key;
-    int     entry_frame;
-    int     end_frame;
-    double  phase; 
-    double  increment;
+    int     sample_start;
+    int     sample_end;
+    float   phase_index;
+    float   phase_increment;
+    // phase_index and phase_increment fields are float because
+    // the final index will be determined through an interpolation.
+    // For now this is the zero order interpolation.
+    // Linear interpolation would be better but for now this will do.
+    double  velocity;
     float   freq;
 } Note;
 
-typedef struct Node {
-    Note*           note;
-    struct Node*    next;
-} Node;
-
-typedef struct {
-    Node    notes;
-    Note**  active_notes; // might need a better structure
-    double  amplitude;
-} Oscillator;
-
-void push_note(Node* notes, Note* note);
-Note* find_note_off(Node* node, int note);
-void free_node(Node* node);
-
-//void pop_node(Node* node, Note* note);
+double get_freq(int note_number);
+float get_increment(double freq);
+#endif // NOTE_H

@@ -3,9 +3,38 @@
 #include <stdlib.h>
 
 #include "../../include/modules/note.h"
+#include "../../include/modules/node.h"
+#include "../../include/modules/mixer.h"
+#include "../../include/modules/constants.h"
+#include "../../include/debugmalloc.h"
 
-void print_notes(Node* node) {
-    Node* current = node;
+//  Description:
+//      Gets how long does the given channel play
+//      in samples by grabbing the sample_end field of the last note;
+//  Arguments:
+//      - Node *base: Pointer to the channels note list;
+//  Return -> int:
+//      Returns the last sample that is relevant to the given channel;
+int get_channel_length(Node *base) {
+    Node *current = base;
+
+    while (current->next != NULL) {
+        current = current->next;
+    }
+
+    return current->note->sample_end;
+    // TODO: Should get the max of the sample_end values.
+}
+
+//  Description:
+//      Prints out all the notes for a given channel note list;
+//      This is only used for debugging;
+//  Arguments:
+//      - Node *node: Pointer to the channels note list;
+//  Return -> void:
+//      No return value;
+void print_notes(Node *base) {
+    Node* current = base;
 
     if (current == NULL || current->note == NULL) {
         fprintf(stdout, "ERROR: print_notes -> Empty linked list");
@@ -14,29 +43,42 @@ void print_notes(Node* node) {
 
     while (current != NULL) {
         printf(
-            "\n\tKey: %d -> Pulse: %d<>%d",
+            "\n\tKey: %d (%lf) -> Pulse: %d<>%d",
             current->note->key,
-            current->note->entry_frame,
-            current->note->end_frame
+            current->note->velocity,
+            current->note->sample_start,
+            current->note->sample_end
         );
 
         current = current->next;
     }
 }
 
-void read(char* file_name) {
+//  Description:
+//      Reads following information from the given midi file:
+//          - tempo
+//          - notes (ON and OFF events)
+//  Arguments:
+//      - Mixer *mixer: Pointer to the mixer;
+//      - char *file_name: Name of the midi file.
+//          This only contains the name ("test") and 
+//          not the path ("midi/") or extension (".mid");
+//  Return -> void:
+//      No return value;
+void read_midi(Mixer *mixer, char *file_name) {
     smf_t *smf;
     smf_event_t *event;
 
     smf = smf_load(file_name);
+
     if (smf == NULL) {
         fprintf(stderr, "ERROR: Couldn't read MIDI file named:\n\t%s\n", file_name);
         return;
     }
 
-    //Node channel_notes[16] = { {NULL} };    // Complete note list.
-    Node channel_actives[16] = { {NULL} };  // Processing list to determine 
-                                            // the length of each note.
+    smf_tempo_t *tempo = smf_get_tempo_by_pulses(smf, 0);
+
+    mixer->tempo = 6000000.0/tempo->microseconds_per_quarter_note;
 
     while ((event = smf_get_next_event(smf)) != NULL) {
         if (smf_event_is_metadata(event)) { continue; }
@@ -51,47 +93,45 @@ void read(char* file_name) {
         int key = buffer[1];
         int velocity = buffer[2];
 
-        printf(
-            "\tType: %04x | Channel: %d | Key: %d | Velocity: %d | Event: %s | Time: %d\n",
-            type, 
-            channel,
-            key,
-            velocity,
-            (type == 0x90 && velocity != 0) ? "ON" : "OFF",
-            event->time_pulses
-        );
-
         if (type == 0x90 && velocity != 0) {
             // Sometimes a NOTE ON and velocity = 0 
             // means a NOTE OFF
             Note* note = malloc(sizeof(Note));
             note->key = key;
-            note->entry_frame = event->time_pulses;
-            note->end_frame = -1;
-            note->phase = 0.0;
-            // handle freq and increment
-            push_note(&channel_actives[channel], note);
+            note->sample_start = event->time_seconds * SAMPLERATE;
+            note->sample_end = -1;
+            note->freq = get_freq(key);
+            note->phase_index = 0;
+            note->phase_increment = get_increment(note->freq);
+            note->velocity = velocity;
+
+            mixer->channels[channel].notes = push_note(mixer->channels[channel].notes, note);
         } else if (type == 0x80 || velocity == 0) {
-            Note* note = find_note_off(&channel_actives[channel], key);
+            Note* note = find_note_off(mixer->channels[channel].notes, key);
             if (note == NULL) { 
                 fprintf(stderr, "ERROR EVENT OFF: On event not found.\n");
                 return;
             }
-            note->end_frame = event->time_pulses;
-
-            printf("Note done: %d -> %d-%d\n", note->key, note->entry_frame, note->end_frame);
+            note->sample_end = event->time_seconds * SAMPLERATE;
         }
     }
-    printf("\n\nRead done\n");
+
+    for (int i = 0; i<16; i++) {
+        if (mixer->channels[i].notes != NULL) {
+            // Select the current node for synthesis.
+            // This is always the first the will go further along
+            // the linked list as the current note has started playing.
+            mixer->channels[i].current_node = mixer->channels[i].notes;
+
+            // Get the sample length of all the channels and select the maximum.
+            // This is needed to automatically stop the audio stream from calling
+            // the callback function when no audio is supposed to be playing.
+            int sample_length = get_channel_length(mixer->channels[i].notes);
+            mixer->sample_length = (sample_length > mixer->sample_length) ? sample_length : mixer->sample_length;
+
+            mixer->active_channel_count++;
+        }
+    }
 
     smf_delete(smf);
-
-    for (int i = 0; i < 16; i++) {
-        if (channel_actives[i].note == NULL) { continue; }
-
-        printf("\n#### CHANNEL %d", i+1);
-        print_notes(&channel_actives[i]);
-
-        free_node(channel_actives[i].next);
-    }
 }

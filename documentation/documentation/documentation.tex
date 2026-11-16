@@ -1,0 +1,1168 @@
+\documentclass{article}
+
+\input{../preamble.tex}
+
+\title{Audió Szintetizátor \\ \large Fejlesztői Dokumentáció}
+\author{Pászti Tibor Miklós}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\pagebreak
+
+\section{Ideiglenes Félkész Információk:}
+\subsection{Program használata:}
+
+A program hivása az alábbi módon történik: \(\text{./synth \textit{midi\_file}}\)
+A jelenlegi MIDI fájlokat a "midi/" mappán belül lehet megtalálni.
+
+A hang lejátszásához a <SPACE> gombot kell lenyomni.
+\begin{cwarning}[Figyelmeztetés:]
+    Ez jelenleg nem működik (a MIDI fájltól függetlenül ad ki hangot).
+    Az ok kiderítésére még nem volt időm de a működés elve látszik 
+    a kódon és a dokumentáción is.
+\end{cwarning}
+
+\subsection{Memória Szivárgás:}
+Tudom hogy sok szivárgás van.
+Ezt kicsit késöbb fogom orvosolni.
+
+\section{Folyamatok:}
+\subsection{MIDI Olvasás:}
+A MIDI olvasás a \href{https://github.com/stump/libsmf}{libsmf} 
+könyvtár segítségével történik.
+A libsmf könyvtár elintézi a bineáris fájl olvasását és pár 
+számítást mint a tempo.
+Ezzel könnyen kilehet olvasni a MIDI eseményeket.
+
+\begin{lstlisting}[caption={MIDI esemény kezelés}]
+while ((event = smf_get_next_event(smf)) != NULL) {
+    if (smf_event_is_metadata(event)) { continue; }
+
+    unsigned char *buffer = event->midi_buffer;
+    int type    = buffer[0] & 0xF0; 
+    int channel = buffer[0] & 0x0F; // 0-15 
+
+    if (type != 0x80 && type != 0x90) { continue; }
+
+    int key = buffer[1];
+    int velocity = buffer[2];
+
+    if (type == 0x90 && velocity != 0) {
+        // ON event
+    } else if (type == 0x80 || velocity == 0) {
+        // OFF event
+    }
+}
+\end{lstlisting}
+\srcfile{src/modules/midi.c:82}
+
+\paragraph{ON Esemény:}
+Ez esemény feltétele, hogy hex kódja \code{0x90}
+és a \code{velocity} változó nem nulla.
+
+\begin{cnote}[Megjegyzés:]
+    Néhány MIDI író az OFF eseményt ON eseményként írja viszont
+    egy nullás velocity változóval.
+\end{cnote}
+
+\paragraph{OFF Esemény:}
+Ez esemény feltétele, hogy hex kódja \code{0x80}
+vagy a \code{velocity} változó nulla.
+
+\begin{cnote}[Megjegyzés:]
+    Nem gond hogy egy sima \code{velocity == 0} feltétel is 
+    kielégíti mert ekkor már kivan szűrve az összes többi esemény 
+    az alábbi sor által: \\ 
+    \code{if (type != 0x80 && type != 0x90) { continue; }}
+\end{cnote}
+
+\subsection{Billentyűk tárolása:}
+A billentyűk \textbf{láncolt listában} vannak tárolva mivel így 
+\code{note.start_sample} szerinti idősorrendben el lehet őket
+tárolni és csak előre tekintően beolvasni őket.
+
+\tikzset{
+  node/.style={draw, rectangle, minimum height=1cm, align=center, font=\small},
+  ptr/.style={-{Stealth}, thick},
+  null/.style={font=\small\ttfamily}
+}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[node distance=1.2cm]
+      \node[node] (a) {key: 45\\ start: 0\\ end: 99};
+      \node[node, right=of a] (b) {key: 52\\ start: 100\\ end: 299};
+      \node[node, right=of b] (c) {key: 45\\ start: 150\\ end: 200};
+      \node[null, right=of c] (end) {NULL};
+
+      \draw[ptr] (a) -- (b);
+      \draw[ptr] (b) -- (c);
+      \draw[ptr] (c) -- (end);
+    \end{tikzpicture}
+    \caption{Billentyű tárolása láncolt lista adat struktúrában}
+\end{figure}
+
+\begin{cnote}[Megjegyzés:]
+    A \code{note.end_sample} nem számít bele a sorrendezésbe.
+    Csak az számit hogy mikor kezdődik.
+
+    Illetve a \code{note.key} a lenyomás konkrét billentyűjét jelenti.
+    Például a 45-dik billentyű (MIDI számozás szerint) az \(A_2\)-es hangot 
+    jelenti.
+\end{cnote}
+
+\subsection{SDL Audió Folyam:}
+
+\subsubsection{Audió Specifikáció:}
+\begin{lstlisting}[caption={Audió specifikáció}]
+gui->spec.channels = 1;
+gui->spec.freq = 44100;
+gui->spec.format = SDL_AUDIO_S16LE;
+\end{lstlisting}
+\srcfile{src/modules/sdl/audio.c}
+
+\paragraph{Magyarázat:}
+\begin{enumerate}
+    \item \code{channels = 1}: Mono audió;
+    \item \code{freq = 44.1}KHz: 44.1KHz sample ráta;
+    \item \code{format = SDL_AUDIO_S16LE}: Signed 16 bites teljes 
+        szám értékek;
+\end{enumerate}
+
+\subsubsection{Callback Funkció:}
+\begin{lstlisting}[caption={Audió folyam megnyitása}]
+    gui->stream = SDL_OpenAudioDeviceStream(
+        SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+        &gui->spec,
+        synth_callback,
+        gui
+    );
+\end{lstlisting}
+\srcfile{src/modules/sdl/audio.c}
+
+\paragraph{Magyarázat:}
+\begin{enumerate}
+    \item \code{SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK}: 
+        SDL által lesz kiválasztva a kimeneti eszköz.
+    \item \code{&gui->spec}: Elöbb emlitett specifikáció.
+    \item \code{synth_callback}: Az SDL3 Mixer ettől a funkciótól 
+        fog \textbf{n} számu sample értéket kérni.
+    \item \code{gui}: Szabadon megadható argumentum amit a callback 
+        funkciónak fog továbbítani.
+\end{enumerate}
+
+\subsection{Szintetizálás:}
+
+\subsubsection{Callback funkció:}
+\begin{lstlisting}[caption={\code{synth_callback()} funkció belseje}]
+if (sample_amount > 0) {  
+    Sint16 *data = SDL_stack_alloc(Sint16, sample_amount/sizeof(Sint16)); 
+
+    if (data) {  
+        synthesize(gui->mixer, data, sample_amount/sizeof(Sint16));
+        SDL_PutAudioStreamData(stream, data, sample_amount);  
+        SDL_stack_free(data);  
+    }  
+} 
+\end{lstlisting}
+\srcfile{src/modules/sdl/audio.c}
+
+A \code{data} tömb-höz \code{sample_amount/sizeof(Sint16)} mennyiségű 
+értéket rendelünk és a \code{synthesize()} funkciónak továbbítjuk
+hogy feltöltse sample értékekkel.
+
+Az adatot belerakjuk az audió folyamba és Felszabadítjuk a \code{data}
+tömböt.
+
+\subsubsection{Mixer Szintetizálás:}
+\begin{lstlisting}[caption={\code{synthesize()} funkció belseje}]
+for (int i = 0; i<sample_count; i++) {
+    Sint16 amplitude = 0;
+    for (int i = 0; i<16; i++) {
+        if (mixer->channels[i].notes != NULL) {
+            amplitude += synthesize_channel(&mixer->channels[i], mixer->sample_index+i);
+        }
+    }
+
+    data[i] = 0.6*amplitude/mixer->active_channel_count;
+}
+\end{lstlisting}
+\srcfile{src/modules/mixer.c}
+
+Minden kért sample értékre lekéri a csatornák értékét 
+majd hozzáadja és leosztja az aktív csatornák számával.
+
+\begin{cnote}[Hullámok Kombinálása:]
+    A hullámok sample értékeinek átlagát kell venni.
+    Összeadás is elég lenne, de benn kell maradni a 
+    hangerő intervallumban ígyhát le kell osztani az 
+    értékek számával.
+\end{cnote}
+
+\begin{cnote}[Megjegyzés:]
+    \code{data[i] = 0.6*amplitude/mixer->active_channel_count;}
+
+    A \textbf{0.6}-al való szorzás csak egy ideiglenes
+    hangerő szabályzás.
+\end{cnote}
+
+\subsubsection{Csatorna Szintetizálás:}
+\paragraph{Csatorna Láncolt Listák Kezelése:}
+
+\tikzset{
+    node/.style={draw, rectangle, minimum height=1cm, align=center, font=\small},
+    ptr/.style={-{Stealth}, thick},
+    null/.style={font=\small\ttfamily},
+    rowlabel/.style={font=\small\ttfamily, anchor=east}
+}
+
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[node distance=1.2cm]
+        \node[node] (na) {key: 45\\ start: 0\\ end: 149};
+        \node[node, right=of na] (nb) {key: 52\\ start: 100\\ end: 299};
+        \node[node, right=of nb] (nc) {key: 45\\ start: 150\\ end: 200};
+        \node[null, right=of nc] (nend) {NULL};
+
+        \node[node, above=of nc] (ca) {key: 45\\ start: 150\\ end: 200};
+
+        \node[node, below=of na] (aa) {key: 45\\ start: 0\\ end: 149};
+        \node[node, right=of aa] (ab) {key: 52\\ start: 100\\ end: 299};
+        \node[null, right=of ab] (aend) {NULL};
+
+        \node[rowlabel] at ([xshift=-0.4cm]na.west |- ca.center) {current\_node};
+        \node[rowlabel] at ([xshift=-0.4cm]na.west |- na.center) {notes};
+        \node[rowlabel] at ([xshift=-0.4cm]na.west |- aa.center) {active\_notes};
+
+        \draw[ptr] (na) -- (nb);
+        \draw[ptr] (nb) -- (nc);
+        \draw[ptr] (nc) -- (nend);
+     
+        \draw[ptr] (ca) -- (nc);
+     
+        \draw[ptr] (aa) -- (na);
+        \draw[ptr] (aa) -- (ab);
+        \draw[ptr] (ab) -- (nb);
+        \draw[ptr] (ab) -- (aend);
+    \end{tikzpicture}
+    \caption{Láncolt listák állapota ha \code{sample_index = 129}}
+\end{figure}
+
+\paragraph{Szintézis Funkció:}
+\begin{lstlisting}[caption={
+    \code{synthesize_channel()} funkció aktív billentyű keresés
+}]
+while (channel->current_node->note->sample_start == sample_index) {
+    channel->active_notes = push_note(
+        channel->active_notes, 
+        channel->current_node->note
+    );
+
+    channel->current_node = channel->current_node->next;
+}
+\end{lstlisting}
+\srcfile{src/modules/channel.c}
+
+Addig megy a ciklus amíg a jelenlegi és az azt követő billentyűk 
+kezdő ideje megegyezik a jelen idővel.
+A ciklus belseje csak akkor fut le amikor a billentyű elérte a kezdő 
+időt. Ilyenkor hozzáadjuk a billentyű referenciáját az aktív 
+billentyűk listához.
+
+\begin{lstlisting}[caption={
+    \code{synthesize_channel()} funkció aktív billentyű törlés
+}]
+Node *current_active_node = channel->active_notes;
+while (current_active_node != NULL) {
+    Node *next = current_active_node->next;
+
+    if (current_active_node->note->sample_end == sample_index) {
+        channel->active_notes = pop_note(
+            channel->active_notes,
+            current_active_node->note
+        );
+    }
+
+    current_active_node = next;
+}
+\end{lstlisting}
+\srcfile{src/modules/channel.c}
+
+A ciklus végig megy az aktív billentyűk listáján és ha egy 
+billentyű vég ideje megegyezik a jelen idővel, akkor kitöröljü
+a referenciát a listából.
+
+\begin{cnote}[Megjegyzés:]
+    A billentyű memória címét nem szabad ilyenkor még kitörölni 
+    különben újra be kell olvasni a MIDI fájlt.
+    A memória címét nem veszítjük el mert a 
+    \code{channel->active_notes} csak referál az adott 
+    billentyűkre amíg \code{channel->notes} az a lista 
+    ami igazából tárolja ezeket és majd csak ezt kell törölni.
+
+    Ugyan ez igaz a \code{channel->current_node} változóra.
+\end{cnote}
+
+\begin{lstlisting}[caption={
+    \code{synthesize_channel()} funkció aktív 
+    billentyűk szintetizálása 
+}]
+Sint16 amplitude = 0;
+int note_count = 0;
+current_active_node = channel->active_notes;
+while (current_active_node != NULL) {
+    amplitude += synthesize_note(
+        &channel->osc,
+        current_active_node->note
+    );
+
+    note_count++;
+    current_active_node = current_active_node->next;
+}
+
+return amplitude/note_count;
+\end{lstlisting}
+\srcfile{src/modules/channel.c}
+
+Ugyanúgy mint eddig, meghívjuk a következő réteg funkcióját 
+és átlagoljuk őket.
+
+\subsubsection{Billentyű Szintetizálás:}
+\begin{lstlisting}[caption={
+    \code{synthesize_note()} funkció belseje
+}]
+int index = (int)SDL_floorf(note->phase_index);
+
+Sint16 amplitude = osc->waveform[index]*note->velocity;
+
+note->phase_index += note->phase_increment;
+note->phase_index = (note->phase_index >= WAVETABLE_SAMPLERATE) ? 
+    0 : note->phase_index;
+
+return amplitude;
+\end{lstlisting}
+\srcfile{src/modules/oscillator.c}
+
+\paragraph{Interpoláció:}
+Minden billentyűnek van egy \code{note.phase_index} változója 
+amit a jelenlegi interpolációs módszer (zeroth order interpolation) 
+szerint lefele teljes egésszámra kell kerekíteni és \code{int} 
+tipusra kell alakítani.
+
+\paragraph{Wavetable Indexelés:}
+Interpoláció után az \code{amplitude} értéket meg lehet kapni
+ha ki index eljük az \code{osc->waveform} tömbjéből és beszorozzuk
+a billentyű hangerejével.
+
+Ezután hozzáadjuk a fázis növelési értéket majd vesszük a 4096-os 
+modulóját hogy elkerüljük a túl indexelést.
+
+\appendix
+\section{Kód Referencia:}
+
+\subsection{Note:}
+Egy billentyű lenyomás adatait tárólja.
+
+\paragraph{Struktúrák:}
+
+\begin{lstlisting}[caption={Note struktúra}]
+typedef struct {
+    int     key;
+    int     sample_start;
+    int     sample_end;
+    float   phase_index;
+    float   phase_increment;
+    double  velocity;
+    float   freq;
+} Note;
+\end{lstlisting}
+\srcfile{include/modules/note.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l l X},
+        rowsep  = 2pt,
+    }
+    Mező & Típus & Leírás \\
+
+    \code{key} & 
+    \SetCell[r=3]{l} \code{int} & 
+    A billentyű számát jelöli egy 0-tól 127-ig tartó intervallumban. 
+    \\
+
+    \code{sample\_start} &
+    & 
+    A billentyű kezdő indexét jelöli. 
+    \\
+
+    \code{sample\_end} &
+    & 
+    A billentyű végző indexét jelöli. 
+    \\
+      
+    \code{phase\_index} & 
+    \SetCell[r=3]{l} \code{float} & 
+    A wavetable-höz tartozó phase-et tartalmazza egy index elhető formában.
+
+    Ennek a phase index-nek még át kell esnie egy interpoláción. 
+    \\
+
+    \code{phase\_increment} &
+    & 
+    A phase index növeléséhez van eltárolva. 
+    \\
+
+    \code{freq} &
+    & 
+    A billentyű frekvenciáját jelöli. 
+    \\
+
+    \code{velocity} & 
+    \code{double} & 
+    A billentyű kezdetlegi hangereje (a lenyomáskor használt erőt jelzi). 
+    \\
+\end{ctblr}
+
+\begin{cnote}[Megjegyzés:]
+    A phase increment mező az alábbi módon számítható ki:
+    \[
+        phase\_increment = \frac{f*L}{S}
+    \]
+    Ahol \(f\) a billentyű frekvenciája, \(L\) a wavetable mérete
+    (ebben az esetben \textbf{4096}) és \(S\) az audió samplerate értéke 
+    (ebben az esetben \textbf{44.1KHz}).
+\end{cnote}
+
+\paragraph{Funkciók:}
+
+\code{double get_freq(int note_number);}
+
+\subparagraph{Leírás:}
+Kiszámolja egy adott billentyű száma alapján a frekvenciája értékét.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{int note_number} \(\Rightarrow\) A billentyű szám értéke.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{double}:}
+Vissza adja a billentyű frekvenciáját.
+\chline
+
+\code{float get_increment(double freq);}
+
+\subparagraph{Leírás:}
+Kiszámolja egy adott billentyű frekvenciáj alapján a 
+fázis növelési értékét.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{double freq} \(\Rightarrow\) A billentyű frekvencia 
+        értéke.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{float}:}
+Vissza adja a billentyű fázis növelési értékét.
+\chline
+
+\subsection{Node:}
+Egy láncolt lista a billentyűk tárolására.
+
+\paragraph{Struktúrák:}
+
+\begin{lstlisting}[caption={Node struktúra}]
+typedef struct Node {
+    Note*           note;
+    struct Node*    next;
+} Node;
+\end{lstlisting}
+\srcfile{include/modules/node.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l l X},
+        rowsep  = 2pt,
+    }
+    Mező & Típus & Leírás \\
+
+    \code{note} & 
+    \code{Note*} & 
+    Egy bizonyos billentyűnek a memória címét tartalmazza.
+    \\
+
+    \code{next} & 
+    \code{struct Node*} & 
+    A következő node memória címét tartalmazza.
+    \\
+\end{ctblr}
+
+\paragraph{Funkciók:}
+
+\code{Node* push_note(Node *base, Note *note);}
+
+\subparagraph{Leírás:}
+Hozzá adja az adott billentyűt az adott láncolt lista végére.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Node *base} \(\Rightarrow\) Pointer a láncolt lista
+        elejére.
+    \item \code{Note *note} \(\Rightarrow\) Pointer az új billentyű 
+        struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{Node*}:}
+Vissza adja a láncolt lista elejét jelölő \code{Node} pointert.
+Ez abban az esetben lényeges ha a \code{base} lista elem memória címe 
+megváltozik és így a kívül létező referencia helytelen lesz.
+\chline
+
+\code{Note* find_note_off(Node *base, int key);}
+
+\subparagraph{Leírás:}
+Megtalálja a legelső billentyűt ami ugyan azt a hangot reprezentálja és
+aminek nincs lezáró sample értéke (\code{end_sample}).
+Ez a funkció a midi fájl olvasás során használandó amikor jön egy
+OFF esemény és megkell találni melyik lenyomásnak van vége.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Node *base} \(\Rightarrow\) Pointer a láncolt lista
+        elejére.
+    \item \code{int key} \(\Rightarrow\) Billentyű szám ami a hangot jelöli.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{Note*}:}
+Visszatérési értéke a talált billentyű ha benne ban a listában és NULL
+a nincs benne.
+\chline
+
+\code{void free_list(Node* base);}
+
+\subparagraph{Leírás:}
+Felszabadítja a lista által foglalt memóriát.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Node *base} \(\Rightarrow\) Pointer a láncolt lista
+        elejére.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{Node* pop_note(Node *base, Note *note);}
+
+\subparagraph{Leírás:}
+Kitörli a láncolt lista egyik elemét.
+
+\begin{cwarning}[Figyelmeztetés:]
+    Ez a funkció nem szabadítja fel a memória helyet ami a listából 
+    ki lett törölve.
+
+    Ez azért van mert ez a funkció csak a \code{channel->active_notes}
+    lista módosítására van ami csak egy referenciát tárol az igazi
+    tároló listára (\code{channel->notes}).
+
+    A billentyűk törlése akkor történik amikor a \code{channel->notes}
+    lista törlésre kerül.
+\end{cwarning}
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Node *base} \(\Rightarrow\) Pointer a láncolt lista
+        elejére.
+    \item \code{Note *note} \(\Rightarrow\) Pointer a billentyű 
+        struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{Node*}:}
+Vissza adja a láncolt lista elejét.
+\chline
+
+\subsection{Oscillator:}
+Egy oszcillátor adatait tartalmazza.
+
+\paragraph{Struktúrák:}
+
+\begin{lstlisting}[caption={Oscillator struktúra}]
+typedef struct {
+    Sint16 waveform[WAVETABLE_SAMPLERATE];
+    double amplitude;
+} Oscillator;
+\end{lstlisting}
+\srcfile{include/modules/oscillator.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l l X},
+        rowsep  = 2pt,
+    }
+    Mező & Típus & Leírás \\
+
+    \code{waveform} & 
+    \code{Sint16[4096]} & 
+    Egy \textbf{4096} hosszú 
+    (\code{WAVETABLE\_SAMPLERATE} = \textbf{4096}) 
+    tömböt tartalmaz ami egy adott hullám \(2*\pi\) reprezentációja.
+    \\
+
+    \code{amplitude} & 
+    \code{double} & 
+    Az oszcillátor-hoz tartozó hangerő szabályzó.
+    \\
+\end{ctblr}
+
+\paragraph{Funkciók:}
+
+\code{void read_waveform(Oscillator *osc, char *name);}
+
+\subparagraph{Leírás:}
+Beolvassa az adott fájl értékeit sorról sorra és belerakja
+az adott oszcillátor waveform tömbjébe.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Oscillator *oscillator} \(\Rightarrow\) Pointer az 
+        oszcillátor struktúrára.
+    \item \code{char *name} \(\Rightarrow\) A beolvasni való fájl neve,
+        hely és kiterjesztés nélkül.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{Sint16 synthesize_note(Oscillator *osc, Note *note);}
+
+\subparagraph{Leírás:}
+Lekérdezi az adott waveform amplitúdóját egy adott billentyű
+fázis változó fügvényében.
+
+Itt történik az interpoláció ami egyenlőre csak egy zero order 
+interpoláció, és ezért nincs külön funkcióba kiszedve.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Oscillator *oscillator} \(\Rightarrow\) Pointer az 
+        oszcillátor struktúrára.
+    \item \code{Note *note} \(\Rightarrow\) Pointer a billentyű struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{Sint16}:}
+Vissza adja egy adott billentyű fázisátol függő amplitude értéket.
+\chline
+
+\subsection{Channel:}
+Egy bizonyos "hangzás"-t és az ehez tartozó billentyűket tartalmazza.
+
+\paragraph{Struktúrák:}
+
+\begin{lstlisting}[caption={Channel struktúra}]
+typedef struct {
+    Node        *notes;
+    Node        *current_node;
+    Node        *active_notes;
+    Oscillator  osc;
+    double      amplitude;
+} Channel;
+\end{lstlisting}
+\srcfile{include/modules/channel.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l l X},
+        rowsep  = 2pt,
+    }
+    Mező & Típus & Leírás \\
+
+    \code{notes} & 
+    \SetCell[r=3]{l} \code{Node*} & 
+    Az összes billentyűt tárolja egy láncolt listában.
+    Ezzek a billentyűk idő sorrendben vannak így elég csak 
+    előre fele menni a szintézis során.
+    \\
+
+    \code{current\_node} & 
+    & 
+    A szintézis során ezz a pointer tartja számon hogy
+    pontosan melyik billentyűnek a kezdését kell vizsgálni.
+    \\
+
+    \code{active\_nodes} & 
+    & 
+    Hasonló a notes listához, de ez csak a jelenleg 
+    szintézis alatt álló billentyűket tárolja.
+    \\
+
+    \code{osc} & 
+    \code{Oscillator} & 
+    Oszcillátort tárol.
+    \\
+
+    \code{amplitude} & 
+    \code{double} & 
+    Az adott csatornához tartozó hangerő szabályzó.
+    \\
+\end{ctblr}
+
+\paragraph{Funkciók:}
+
+\code{Sint16 synthesize_channel(Channel *channel, int sample_index);}
+
+\subparagraph{Leírás:}
+visszaküld egy adott sample index helyen szintetizált amplitude 
+értéket.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Channel *channel} \(\Rightarrow\) Pointer a csatorna struktúrára.
+    \item \code{int sample_index} \(\Rightarrow\) Jelenlegi sample érték indexe.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{Sint16}:}
+Visszaküld egy adott pozícióban szintetizált amplitude értéket.
+\chline
+
+\subsection{Mixer:}
+A csatornákat és egyéb adatokat összegzi.
+
+\paragraph{Struktúrák:}
+
+\begin{lstlisting}[caption={Mixer struktúra}]
+typedef struct {
+    Channel channels[16];
+    int     active_channel_count;
+    int     sample_index;
+    int     sample_length;
+    double  tempo;
+} Mixer;
+\end{lstlisting}
+\srcfile{include/modules/mixer.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l l X},
+        rowsep  = 2pt,
+    }
+    Mező & Típus & Leírás \\
+
+    \code{channels} & 
+    \code{Channel[16]} & 
+    Egy 16 hosszú tömb a csatornák tárolására.
+    \\
+
+    \code{active_channel_count} & 
+    \SetCell[r=3]{l} \code{int} & 
+    A nem üres csatornák száma.
+    \\
+    
+    \code{sample_index} & 
+    &
+    Sample index számláló.
+    \\
+
+    \code{sample_length} & 
+    &
+    A generált hang maximum sample száma.
+    \\
+
+    \code{tempo} & 
+    \code{double} &
+    tempo számláló.
+    \\
+\end{ctblr}
+
+\paragraph{Funkciók:}
+
+\code{void init_mixer(Mixer *mixer);}
+
+\subparagraph{Leírás:}
+Előkészíti a mixer-en belül lévő csatornákat és egyéb változókat.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Mixer *mixer} \(\Rightarrow\) Pointer a mixer Struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void synthesize(Mixer *mixer, Sint16 *data, int sample_count);}
+
+\subparagraph{Leírás:}
+Egy adott mennyiségű sample értéket szintetizál le és írja bele
+a megadott tömb pointer-be.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Mixer *mixer} \(\Rightarrow\) Pointer a mixer Struktúrára.
+    \item \code{Sint16 *data} \(\Rightarrow\) Tömb pointer amit 
+        audió folyamba lesz beküldve.
+    \item \code{int sample_count} \(\Rightarrow\) A lekért sample értékek 
+        száma.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void free_mixer(Mixer *mixer);}
+
+\subparagraph{Leírás:}
+Felszabadítja a mixer-en belül foglalt memóriát.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Mixer *mixer} \(\Rightarrow\) Pointer a mixer Struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\subsection{Constants:}
+Egyéb gyakran használt konstansok tárolása.
+
+\paragraph{Konstansok:}
+
+\begin{lstlisting}[caption={Általános konstansok}]
+#define SAMPLERATE 44100
+#define WAVETABLE_SAMPLERATE 4096
+#define TUNING 440
+#define MAX_VOLUME 32765
+\end{lstlisting}
+\srcfile{include/modules/constants.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l X},
+        rowsep  = 2pt,
+    }
+    Mező & Leírás \\
+
+    \code{SAMPLERATE} & 
+    A végső audió sample rátája.
+    Tipikusan \textbf{44.1} vagy \textbf{48KHz}.
+    \\
+
+    \code{WAVETABLE_SAMPLERATE} & 
+    A wavetable sample értékek száma.
+    Ebben az esetben \textbf{4096}.
+    \\
+
+    \code{TUNING} & 
+    A hangok alap hangolása.
+    Tipikusan \textbf{440Hz}.
+    \\
+
+    \code{MAX_VOLUME} & 
+    Maximum hangerő. Mivel egy sample \code{Sint16} értékű,
+    ezért az alábbi intervallumban lehet egy érték:
+    \([-2^{15}, 2^{15}[\)
+    \\
+\end{ctblr}
+
+\subsection{Midi:}
+Midi file olvasást teszt lehetővé.
+
+\paragraph{Funkciók:}
+
+\code{int get_channel_length(Node *base);}
+
+\subparagraph{Leírás:}
+Visszaküldi az adott csatorna sample hosszát.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Node *base} \(\Rightarrow\) Pointer a láncolt lista
+        elejére.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{int}:}
+Visszaküldi a csatorna hosszát sample szám alapján.
+\chline
+
+\code{void print_notes(Node *node);}
+
+\subparagraph{Leírás:}
+Kiírja az összes billentyű lenyomást az adott csatornára.
+Ez csak debug esetén használandó.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Node *base} \(\Rightarrow\) Pointer a láncolt lista
+        elejére.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void read_midi(Mixer *mixer, char *file_name);}
+
+\subparagraph{Leírás:}
+Beolvassa az adott midi fájlt egy adott mixer csatornáiba.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{Mixer *mixer} \(\Rightarrow\) Pointer a mixer Struktúrára.
+    \item \code{char *file_name} \(\Rightarrow\) Az adott midi fájl neve.
+        Ez csak a fájlnév ("test"). nem tartalmazza a helyét ("midi/")
+        és a fájl kiterjesztést (".mid").
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+
+\subsection{SDL:}
+
+\paragraph{Konstansok:}
+
+\begin{lstlisting}[caption={SDL konstansok}]
+#define SDL_FLAGS (SDL_INIT_VIDEO | SDL_INIT_AUDIO)
+#define WINDOW_TITLE "Synth"
+#define WINDOW_WIDTH 800
+#define WINDOW_HEIGHT 600
+\end{lstlisting}
+\srcfile{include/modules/sdl/sdl.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l X},
+        rowsep  = 2pt,
+    }
+    Mező & Leírás \\
+
+    \code{SDL_FLAGS} & 
+    SDL-el kapcsolatos flag-ek beállítása.
+    \\
+
+    \code{WINDOW_TITLE} & 
+    SDL ablak neve.
+    \\
+
+    \code{WINDOW_WIDTH} & 
+    SDL ablak szélessége.
+    \\
+
+    \code{WINDOW_HEIGHT} & 
+    SDL ablak magassága.
+    \\
+\end{ctblr}
+
+\paragraph{Struktúrák:}
+
+\begin{lstlisting}[caption={GUI struktúra}]
+typedef struct {
+    SDL_Window          *window;
+    SDL_Renderer        *renderer;
+    SDL_Event           event;
+
+    SDL_AudioStream     *stream;
+    SDL_AudioSpec       spec;
+
+    Mixer               *mixer;
+
+    bool                is_running;
+} GUI;
+\end{lstlisting}
+\srcfile{include/modules/sdl/sdl.h}
+
+\begin{ctblr}{
+        width   = \linewidth,
+        colspec = {l l X},
+        rowsep  = 2pt,
+    }
+    Mező & Típus & Leírás \\
+
+    \code{window} & 
+    \code{SDL_Window*} & 
+    SDL ablak referencia.
+    \\
+
+    \code{renderer} & 
+    \code{SDL_Renderer*} & 
+    SDL renderer referencia.
+    \\
+    
+    \code{event} & 
+    \code{SDL_Event}&
+    SDL esemény tároló.
+    \\
+
+    \code{stream} & 
+    \code{SDL_AudioStream*}&
+    SDL audió folyam referencia.
+    \\
+
+    \code{spec} & 
+    \code{SDL_AudioSpec} &
+    SDL audió specifikáció tároló.
+    \\
+
+    \code{mixer} & 
+    \code{Mixer*} &
+    Mixer referencia.
+    \\
+
+    \code{is_running} & 
+    \code{bool} &
+    Fő loop vezérlője.
+    \\
+\end{ctblr}
+
+\paragraph{Funkciók:}
+
+\code{bool init_gui(GUI *gui);}
+
+\subparagraph{Leírás:}
+Az ablak és renderer megnyitását valósitja meg.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{bool}:}
+Igaz ha sikeres és hamis ha sikertelen.
+\chline
+
+\code{bool new_gui(GUI *gui);}
+
+\subparagraph{Leírás:}
+A gui struktúra alap beállítását intézi és meghívja az 
+\code{init_gui(gui)} funkciót.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{bool}:}
+Igaz ha sikeres és hamis ha sikertelen.
+\chline
+
+\code{void event_handling(GUI *gui);}
+
+\subparagraph{Leírás:}
+Az SDL események kezelését teszi lehetővé.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void render(GUI *gui);}
+
+\subparagraph{Leírás:}
+Az SDL grafikai megjelenítését teszi lehetővé.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void run_gui(GUI *gui);}
+
+\subparagraph{Leírás:}
+A fő loop-ot indítja és ezen belül hívja az \code{event_handling(gui)}
+és a \code{render(gui)} funkciókat.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void free_gui(GUI *gui);}
+
+\subparagraph{Leírás:}
+Felszabadítja a gui struktúrában tárolt egyéb memória címeket.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\subsection{Audio:}
+
+\paragraph{Funkciók:}
+
+\code{bool init_audio(GUI *gui);}
+
+\subparagraph{Leírás:}
+Alaphelyzetbe állítja az audio folyamot és lefoglalja
+az audió kimenetet.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{bool}:}
+Igaz ha sikeres és hamis ha sikertelen.
+\chline
+
+\code{void free_audio(GUI *gui);}
+
+\subparagraph{Leírás:}
+Felszabadítja az audió folyam által foglalt memóriát.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{GUI *gui} \(\Rightarrow\) Pointer a gui struktúrára.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\code{void SDLCALL synth_callback(
+    void *gui_p,
+    SDL_AudioStream *stream,
+    int sample_amount,
+    int total_amount
+);}
+
+\subparagraph{Leírás:}
+Ezt a funkciót az SDL Mixer autómatikusan meghívja amikor
+fel kell tölteni az audió folyamot.
+
+Ilyenkor a funkció kap egy \code{sample_amount} argumentumot
+ami a kért sample értékek számát jelzi.
+
+\subparagraph{Argumentumok:}
+\begin{enumerate}
+    \item \code{void *gui_p} \(\Rightarrow\) Void pointer a gui struktúrára.
+    \item \code{SDL_AudioStream *stream} \(\Rightarrow\) Pointer az
+        audió folyam struktúrára.
+    \item \code{int sample_amount} \(\Rightarrow\) Kért sample értékek
+        száma.
+    \item \code{int total_amount} \(\Rightarrow\) Eddigi sample értékek
+        száma.
+\end{enumerate}
+
+\subparagraph{Visszatérési Érték \(\rightarrow\) \code{void}:}
+Nincs visszatérési érték.
+\chline
+
+\end{document}
