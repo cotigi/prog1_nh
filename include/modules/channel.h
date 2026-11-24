@@ -14,5 +14,5 @@ typedef struct {
     //double      output[];
     // Velocity function pointer
 } Channel;
-Sint16 synthesize_channel(Channel *channel, int sample_index);
+double synthesize_channel(Channel *channel, int sample_index);
 #endif // CHANNEL_H

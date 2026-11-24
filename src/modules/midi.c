@@ -17,13 +17,14 @@
 //      Returns the last sample that is relevant to the given channel;
 int get_channel_length(Node *base) {
     Node *current = base;
+    int max = 0;
 
-    while (current->next != NULL) {
+    while (current != NULL) {
+        max = (current->note->sample_end > max) ? current->note->sample_end : max;
         current = current->next;
     }
 
-    return current->note->sample_end;
-    // TODO: Should get the max of the sample_end values.
+    return max;
 }
 
 //  Description:
@@ -100,10 +101,11 @@ void read_midi(Mixer *mixer, char *file_name) {
             note->key = key;
             note->sample_start = event->time_seconds * SAMPLERATE;
             note->sample_end = -1;
+            note->sample_index = 0;
             note->freq = get_freq(key);
             note->phase_index = 0;
             note->phase_increment = get_increment(note->freq);
-            note->velocity = velocity;
+            note->velocity = velocity/127.0;
 
             mixer->channels[channel].notes = push_note(mixer->channels[channel].notes, note);
         } else if (type == 0x80 || velocity == 0) {

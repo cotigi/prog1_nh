@@ -16,13 +16,17 @@
 //      No return value;
 void init_mixer(Mixer *mixer) {
     for (int i = 0; i<16; i++) {
+        printf("Channel: %d\n", i);
         mixer->channels[i].notes = NULL; 
         mixer->channels[i].amplitude = 0.7;
-        read_waveform(&mixer->channels[i].osc, "sine");
+        mixer->channels[i].osc.amplitude = 0.7;
+        read_waveform(&mixer->channels[i].osc, "square");
     }
 
     mixer->sample_index = 0;
+    mixer->sample_length = 0;
     mixer->active_channel_count = 0;
+    mixer->tempo = 0;
 }
 
 //  Description:
@@ -35,25 +39,35 @@ void init_mixer(Mixer *mixer) {
 //  Return -> void:
 //      No return value;
 void synthesize(Mixer *mixer, Sint16 *data, int sample_count) {
+    //const double step = 2.0 * SDL_PI_D * 110.0 / 44100.0;
+
     for (int i = 0; i<sample_count; i++) {
-        Sint16 amplitude = 0;
+        double amplitude = 0.0;
         // for (int i = 0; i<mixer->active_channel_count; i++) {
         //
         // This shouldn't go through the empty channels, this is 
         // just a quick fix.
-        for (int i = 0; i<16; i++) {
-            if (mixer->channels[i].notes != NULL) {
-                amplitude += synthesize_channel(&mixer->channels[i], mixer->sample_index+i);
+        for (int j = 0; j<16; j++) {
+            if (mixer->channels[j].notes != NULL) {
+                //double phase = ((double)(mixer->sample_index+i)*1720)/44100;
+                //amplitude += (Sint16)(MAX_VOLUME*SDL_sin(step*(mixer->sample_index+i)));
+                amplitude += synthesize_channel(&mixer->channels[j], mixer->sample_index+i);
             }
         }
         //printf("\tdata -> %d -> %d\n", amplitude, amplitude/mixer->active_channel_count);
+        amplitude /= mixer->active_channel_count;
+        amplitude = (amplitude >= 1.0) ?
+            1.0 : (amplitude <= -1.0) ?
+                -1.0 :
+                amplitude
+            ;
 
-        // Normalize the amplitude by dividing it by the number of active channels.
-        // The multiply of 0.1 is not needed but due to some errors either
-        // while calculating the amplitudes or when passing them to the
-        // SDL3 mixer, the sound is very loud.
-        // By the way, this doesn't work. weird!!!
-        data[i] = 0.1*amplitude/mixer->active_channel_count;
+        data[i] = (Sint16)(MAX_VOLUME*(amplitude));
+        //data[i] = (Sint16)(MAX_VOLUME*SDL_sin(step*(mixer->sample_index+i)));
+        //double amp = synthesize_channel(&mixer->channels[0], mixer->sample_index+i);
+        //double amp = synthesize_channel(&mixer->channels[1], mixer->sample_index+i);
+        //data[i] = (Sint16)(0.6*MAX_VOLUME*amp);
+        //data[i] = (Sint16)(0.6*MAX_VOLUME*synthesize_channel(&mixer->channels[0], mixer->sample_index+i));
     }
 
     mixer->sample_index += sample_count;
@@ -70,5 +84,9 @@ void free_mixer(Mixer *mixer) {
     // channel fields need to be freed.
     for (int i = 0; i<16; i++) {
         free_list(mixer->channels[i].notes);
+        //printf("\n\tChannel %d active: %p", i, mixer->channels[i].active_notes);
+        if (mixer->channels[i].active_notes != NULL) {
+            //free_active_list(mixer->channels[i].active_notes);
+        }
     }
 }

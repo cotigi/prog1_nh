@@ -9,7 +9,7 @@
 //  Return -> double:
 //      returns the frequency of the given note;
 double get_freq(int note_number) {
-    return SDL_pow(2, (note_number-49.0)/12)*TUNING;
+    return SDL_pow(2, (note_number-69.0)/12)*TUNING;
 }
 
 //  Arguments:

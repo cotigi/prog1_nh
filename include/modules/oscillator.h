@@ -6,11 +6,12 @@
 #ifndef OSCILLATOR_H
 #define OSCILLATOR_H
 typedef struct {
-    Sint16 waveform[WAVETABLE_SAMPLERATE];
+    double waveform[WAVETABLE_SAMPLERATE];
     double amplitude;
     // TODO: Envelope
 } Oscillator;
 
 void read_waveform(Oscillator *osc, char *name);
-Sint16 synthesize_note(Oscillator *osc, Note *note);
+double synthesize_note(Oscillator *osc, Note *note);
+double envelope(double amplitude, Note *note);
 #endif // OSCILLATOR_H

@@ -77,7 +77,10 @@ void event_handling(GUI *gui) {
         case SDL_EVENT_KEY_DOWN:
             if (gui->event.key.scancode == SDL_SCANCODE_SPACE) {
                 SDL_ResumeAudioStreamDevice(gui->stream); // Start audio playback
-            }
+                printf("Audio playing\n");
+            } else if (gui->event.key.scancode == SDL_SCANCODE_Q) {
+                gui->is_running = false;
+            } 
             // TODO: Should make this a toggle option.
             break;
         default:

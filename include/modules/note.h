@@ -5,6 +5,7 @@ typedef struct {
     int     key;
     int     sample_start;
     int     sample_end;
+    int     sample_index;
     float   phase_index;
     float   phase_increment;
     // phase_index and phase_increment fields are float because

@@ -9,6 +9,7 @@
 #include "../include/modules/sdl/audio.h"
 #include "../include/modules/oscillator.h"
 #include "../include/debugmalloc.h"
+// asdf
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
@@ -26,9 +27,11 @@ int main(int argc, char *argv[]) {
     init_mixer(&mixer);
     read_midi(&mixer, midi_filepath);
 
+    printf("Active channel count: %d\n", mixer.active_channel_count);
+
     // Temporary
-    mixer.channels[0].amplitude = 0.5;
-    mixer.channels[0].osc.amplitude = 0.5;
+    //mixer.channels[0].amplitude = 0.5;
+    //mixer.channels[0].osc.amplitude = 0.5;
 
     /*
     printf("\n\n## FINAL CHANNEL NOTES");
@@ -52,6 +55,7 @@ int main(int argc, char *argv[]) {
     run_gui(&gui);
 
     free_audio(&gui);
+    free_mixer(gui.mixer);
     free_gui(&gui);
 
     return EXIT_SUCCESS;

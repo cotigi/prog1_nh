@@ -13,9 +13,9 @@
 //      - int sample_index: Index of the given sample to calculate;
 //  Return -> Sint16:
 //      Returns the amplitude at the given sample index for the channel;
-Sint16 synthesize_channel(Channel *channel, int sample_index) {
+double synthesize_channel(Channel *channel, int sample_index) {
     // Check if the current node has started yet. 
-    while (channel->current_node->note->sample_start == sample_index) {
+    while (channel->current_node != NULL && channel->current_node->note->sample_start == sample_index) {
         // If it has started add it to the active notes list.
         channel->active_notes = push_note(
             channel->active_notes, 
@@ -37,11 +37,21 @@ Sint16 synthesize_channel(Channel *channel, int sample_index) {
             );
         }
 
+        /*
+        if (current_active_node->note->sample_start < sample_index ||
+            current_active_node->note->sample_end > sample_index) {
+            channel->active_notes = pop_note(
+                channel->active_notes,
+                current_active_node->note
+            );
+        }
+        */
+
         current_active_node = next;
     }
 
     // Go through all the active notes and calculate the amplitudes.
-    Sint16 amplitude = 0;
+    double amplitude = 0;
     int note_count = 0;
     current_active_node = channel->active_notes;
     while (current_active_node != NULL) {
@@ -54,5 +64,22 @@ Sint16 synthesize_channel(Channel *channel, int sample_index) {
         current_active_node = current_active_node->next;
     }
 
-    return amplitude/note_count;
+    /*
+    if (note_count != 0) {
+        amplitude = (amplitude/note_count > 1.0) ?
+            1.0 : (amplitude/note_count < -1.0) ?
+                -1.0 :
+                amplitude/note_count
+            ;
+    }
+    */
+    amplitude = (note_count != 0) ? amplitude/note_count : 0;
+    amplitude = (amplitude >= 1.0) ?
+        1.0 : (amplitude <= -1.0) ?
+            -1.0 :
+            amplitude
+        ;
+
+    return amplitude;
+    //return (note_count != 0) ? amplitude/note_count : 0;
 }

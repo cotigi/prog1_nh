@@ -1,5 +1,4 @@
 #include <stdlib.h>
-#include <stdio.h>
 
 #include "../../include/modules/note.h"
 #include "../../include/modules/node.h"
@@ -101,6 +100,26 @@ void free_list(Node* base) {
 }
 
 //  Description:
+//      Frees all the nodes in the linked list along 
+//      with the notes using recursion;
+//  Arguments:
+//      - Node *base: Pointer to the base of the linked list;
+//  Return -> void:
+//      No return value;
+void free_active_list(Node* base) {
+    //  Base case:
+    //      Current node is NULL;
+    if (base == NULL) {
+        return;
+    }
+
+    // Call the function on the next node until the
+    // base case is true.
+    free_list(base->next);
+    free(base);
+}
+
+//  Description:
 //      Pops a node from a given linked list specified by 
 //      the base node pointer.
 //      The note is found by compairing note pointers.
@@ -120,23 +139,29 @@ void free_list(Node* base) {
 //  Return -> Node*:
 //      Returns the possibly new base node;
 Node* pop_note(Node *base, Note *note) {
-    if (base->note == note) { return base->next; }
     if (base == NULL) { return base; }
+    if (base->note == note) { 
+        Node *next = base->next;
+        free(base);
+        return next; 
+    }
 
     Node* current = base;
 
     // Loop until the node is NULL or the note pointers match.
-    while (current != NULL && current->note != note) {
+    while (current->next != NULL && current->next->note != note) {
         current = current->next;   
     }
 
-    // Most likely doesn't work.
-    // Check for the possibility that note is not withing the list.
     if (current->next == NULL) {
         return base;
     }
 
-    current->next = current->next->next;
+    if (current->next->note == note) {
+        Node *next = current->next->next;
+        free(current->next);
+        current->next = next;
+    }
 
     return base;
 }

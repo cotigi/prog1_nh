@@ -10,5 +10,6 @@ typedef struct Node {
 Node* push_note(Node *base, Note *note);
 Note* find_note_off(Node *base, int key);
 void free_list(Node *base);
+void free_active_list(Node *base);
 Node* pop_note(Node *base, Note *node);
 #endif // NODE_H

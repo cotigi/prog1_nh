@@ -67,6 +67,7 @@ void SDLCALL synth_callback(
 ) {  
     // Cast the userdata pointer to the correct type
     GUI *gui = (GUI *)gui_p;
+    //printf("\n\t%d -> %d", total_amount, sample_amount);
 
     // Check if the sample index exceeds the mixer's sample length.
     if (gui->mixer->sample_index+sample_amount > gui->mixer->sample_length) {
@@ -78,7 +79,7 @@ void SDLCALL synth_callback(
     if (sample_amount > 0) {  
         Sint16 *data = SDL_stack_alloc(Sint16, sample_amount/sizeof(Sint16)); 
 
-        if (data) {  
+        if (data != NULL) {  
             synthesize(gui->mixer, data, sample_amount/sizeof(Sint16));
             SDL_PutAudioStreamData(stream, data, sample_amount);  
             SDL_stack_free(data);  
@@ -88,3 +89,5 @@ void SDLCALL synth_callback(
     // Temporary fix. Ignore it.
     sample_amount = total_amount;
 }  
+
+
