@@ -1,8 +1,10 @@
 #include <SDL3/SDL_stdinc.h>
+#include <stdatomic.h>
 
 #include "../../include/modules/channel.h"
 #include "../../include/modules/oscillator.h"
 #include "../../include/modules/node.h"
+#include "../../include/modules/helper.h"
 #include "../../include/debugmalloc.h"
 
 //  Description:
@@ -56,9 +58,16 @@ double synthesize_channel(Channel *channel, int sample_index) {
     current_active_node = channel->active_notes;
     while (current_active_node != NULL) {
         amplitude += synthesize_note(
-            &channel->osc,
+            &channel->primary_osc,
             current_active_node->note
         );
+        
+        amplitude += synthesize_note(
+            &channel->secondary_osc,
+            current_active_node->note
+        );
+
+        next_phase(current_active_node->note);
 
         note_count++;
         current_active_node = current_active_node->next;
@@ -73,12 +82,18 @@ double synthesize_channel(Channel *channel, int sample_index) {
             ;
     }
     */
-    amplitude = (note_count != 0) ? amplitude/note_count : 0;
+    amplitude = (note_count != 0) ? amplitude/note_count*2 : 0;
+
+    amplitude = limit(amplitude, atomic_load(&channel->limit));
+    /*
     amplitude = (amplitude >= 1.0) ?
         1.0 : (amplitude <= -1.0) ?
             -1.0 :
             amplitude
         ;
+    */
+
+    amplitude *= atomic_load(&channel->amplitude);
 
     return amplitude;
     //return (note_count != 0) ? amplitude/note_count : 0;

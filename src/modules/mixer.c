@@ -1,11 +1,13 @@
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_stdinc.h>
 #include <stdio.h>
+#include <stdatomic.h>
 
 #include "../../include/modules/mixer.h"
 #include "../../include/modules/oscillator.h"
 #include "../../include/modules/channel.h"
 #include "../../include/modules/node.h"
+#include "../../include/modules/helper.h"
 #include "../../include/debugmalloc.h"
 
 //  Description:
@@ -18,15 +20,25 @@ void init_mixer(Mixer *mixer) {
     for (int i = 0; i<16; i++) {
         printf("Channel: %d\n", i);
         mixer->channels[i].notes = NULL; 
-        mixer->channels[i].amplitude = 0.7;
-        mixer->channels[i].osc.amplitude = 0.7;
-        read_waveform(&mixer->channels[i].osc, "square");
+        mixer->channels[i].current_node = NULL; 
+        mixer->channels[i].active_notes = NULL; 
+        atomic_init(&mixer->channels[i].amplitude, 0.7);
+        atomic_init(&mixer->channels[i].limit, 1.0);
+        //mixer->channels[i].amplitude = 0.7;
+        atomic_init(&mixer->channels[i].primary_osc.amplitude, 0.7);
+        atomic_init(&mixer->channels[i].primary_osc.limit, 1.0);
+        atomic_init(&mixer->channels[i].secondary_osc.amplitude, 0.0);
+        atomic_init(&mixer->channels[i].secondary_osc.limit, 1.0);
+        //mixer->channels[i].osc.amplitude = 0.7;
+        //read_waveform(&mixer->channels[i].osc, "square");
     }
 
     mixer->sample_index = 0;
     mixer->sample_length = 0;
     mixer->active_channel_count = 0;
     mixer->tempo = 0;
+    //mixer->amplitude = 0.7;
+    atomic_init(&mixer->amplitude, 0.7);
 }
 
 //  Description:
@@ -56,11 +68,17 @@ void synthesize(Mixer *mixer, Sint16 *data, int sample_count) {
         }
         //printf("\tdata -> %d -> %d\n", amplitude, amplitude/mixer->active_channel_count);
         amplitude /= mixer->active_channel_count;
+        amplitude = limit(amplitude, 1.0);
+        /*
         amplitude = (amplitude >= 1.0) ?
             1.0 : (amplitude <= -1.0) ?
                 -1.0 :
                 amplitude
             ;
+        */
+        amplitude *= atomic_load(&mixer->amplitude);
+
+        atomic_store(&mixer->level, (amplitude<0) ? -amplitude : amplitude);
 
         data[i] = (Sint16)(MAX_VOLUME*(amplitude));
         //data[i] = (Sint16)(MAX_VOLUME*SDL_sin(step*(mixer->sample_index+i)));
@@ -85,8 +103,6 @@ void free_mixer(Mixer *mixer) {
     for (int i = 0; i<16; i++) {
         free_list(mixer->channels[i].notes);
         //printf("\n\tChannel %d active: %p", i, mixer->channels[i].active_notes);
-        if (mixer->channels[i].active_notes != NULL) {
-            //free_active_list(mixer->channels[i].active_notes);
-        }
+        free_active_list(mixer->channels[i].active_notes);
     }
 }

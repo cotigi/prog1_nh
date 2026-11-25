@@ -86,17 +86,12 @@ Note* find_note_off(Node *base, int key) {
 //  Return -> void:
 //      No return value;
 void free_list(Node* base) {
-    //  Base case:
-    //      Current node is NULL;
-    if (base == NULL) {
-        return;
+    while (base != NULL) {
+        Node *next = base->next;
+        free(base->note);
+        free(base);
+        base = next;
     }
-
-    // Call the function on the next node until the
-    // base case is true.
-    free_list(base->next);
-    free(base->note);
-    free(base);
 }
 
 //  Description:
@@ -107,16 +102,11 @@ void free_list(Node* base) {
 //  Return -> void:
 //      No return value;
 void free_active_list(Node* base) {
-    //  Base case:
-    //      Current node is NULL;
-    if (base == NULL) {
-        return;
+    while (base != NULL) {
+        Node *next = base->next;
+        free(base);
+        base = next;
     }
-
-    // Call the function on the next node until the
-    // base case is true.
-    free_list(base->next);
-    free(base);
 }
 
 //  Description:
@@ -148,20 +138,25 @@ Node* pop_note(Node *base, Note *note) {
 
     Node* current = base;
 
-    // Loop until the node is NULL or the note pointers match.
-    while (current->next != NULL && current->next->note != note) {
+    while (current->next != NULL) {
+        if (current->next->note == note) {
+            Node *next = current->next->next;
+            free(current->next);
+            current->next = next;
+
+            return base;
+        }
+
         current = current->next;   
     }
 
-    if (current->next == NULL) {
-        return base;
-    }
-
+    /*
     if (current->next->note == note) {
         Node *next = current->next->next;
         free(current->next);
         current->next = next;
     }
+    */
 
     return base;
 }

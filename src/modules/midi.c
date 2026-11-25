@@ -111,9 +111,9 @@ void read_midi(Mixer *mixer, char *file_name) {
         } else if (type == 0x80 || velocity == 0) {
             Note* note = find_note_off(mixer->channels[channel].notes, key);
             if (note == NULL) { 
-                fprintf(stderr, "ERROR EVENT OFF: On event not found.\n");
+                fprintf(stderr, "ERROR EVENT OFF: On event not found.\n\tNote will be ignored");
                 return;
-            }
+            } 
             note->sample_end = event->time_seconds * SAMPLERATE;
         }
     }

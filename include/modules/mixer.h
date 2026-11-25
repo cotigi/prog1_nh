@@ -1,4 +1,5 @@
 #include <SDL3/SDL_stdinc.h>
+#include <stdatomic.h>
 
 #include "channel.h"
 
@@ -7,7 +8,11 @@
 typedef struct {
     Channel channels[16];
     int     active_channel_count;
+
     double  tempo;
+    _Atomic double  amplitude;
+    _Atomic double  level;
+
     int     sample_index;
     int     sample_length;
 } Mixer;

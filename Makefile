@@ -1,10 +1,10 @@
 CC = gcc
 # Automatically fetch include paths for GLib, SDL3, and SDL3_mixer
-CFLAGS = -Wall -Wextra -Iinclude -g $(shell pkg-config --cflags glib-2.0 sdl3 sdl3-mixer)
+CFLAGS = -Wall -Wextra -Iinclude -g -MMD -MP $(shell pkg-config --cflags glib-2.0 sdl3 sdl3-mixer)
 # Automatically fetch library linking flags
-LDLIBS = $(shell pkg-config --libs glib-2.0 sdl3 sdl3-mixer) -lsmf -L/usr/local/lib
+LDLIBS = $(shell pkg-config --libs glib-2.0 sdl3 sdl3-mixer) -lsmf -latomic -L/usr/local/lib
 
-SRCS = $(wildcard src/*.c) $(wildcard src/modules/*.c) $(wildcard src/modules/sdl/*.c)
+SRCS = $(wildcard src/*.c) $(wildcard src/microui/microui.c) $(wildcard src/modules/*.c) $(wildcard src/modules/sdl/*.c)
 
 # Route all object files into the build/ folder
 OBJS = $(patsubst %.c, build/%.o, $(SRCS))

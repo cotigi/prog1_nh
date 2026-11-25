@@ -1,11 +1,12 @@
 import numpy as np
 
 period = 2*np.pi
-increment = period/4096
+sample_count = 4096
 
-x = np.arange(0, period, increment)
-y = np.sin(x)
+x = np.linspace(0, period, sample_count, endpoint=False)
 
-with open("sine.txt", "w") as f:
+y = 1 - (x / np.pi)
+
+with open("falling-saw.txt", "w") as f:
     for i in range(len(y)):
         f.write(f"{y[i]}\n")
